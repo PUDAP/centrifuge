@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
+import logging
 from typing import Optional
 import websocket
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,9 @@ class Centrifuge:
         self._ws: Optional[websocket.WebSocket] = None
 
     def startup(self) -> str:
-        """Open websocket connection and return device greeting."""
+        """Connect to the centrifuge machine via websocket."""
         self._connect()
         logger.info("Centrifuge machine connected successfully")
-        return self._recv()
 
     def close(self) -> None:
         """Close websocket connection if it exists."""
@@ -55,7 +54,15 @@ class Centrifuge:
         return position
 
     def open_lid(self, device: str) -> None:
-        """Open lid for centrifuge device 1 or 2."""
+        """Open lid for centrifuge device
+        
+        Args:
+            device: The device to open the lid of ("1" or "2")
+
+        Raises:
+            ValueError: If the device is not "1" or "2"
+            Exception: If the lid cannot be opened
+        """
         device = self._validate_device(device)
         try:
             self._command(f"H{device}", wait_for={"Ok", f"Homed{device}"})
@@ -65,7 +72,15 @@ class Centrifuge:
             raise
 
     def close_lid(self, device: str) -> None:
-        """Close lid for centrifuge device 1 or 2."""
+        """Close lid for centrifuge device
+
+        Args:
+            device: The device to close the lid of ("1" or "2")
+
+        Raises:
+            ValueError: If the device is not "1" or "2"
+            Exception: If the lid cannot be closed
+        """
         device = self._validate_device(device)
         try:
             self._command(f"#{device}050", wait_for="Ok")
@@ -75,7 +90,16 @@ class Centrifuge:
             raise
 
     def spin(self, device: str, duration: float) -> None:
-        """Spin centrifuge device 1 or 2 for the given duration in seconds."""
+        """Spin centrifuge device for the given duration in seconds.
+        
+        Args:
+            device: The device to spin ("1" or "2")
+            duration: The duration to spin the device for in seconds
+
+        Raises:
+            ValueError: If the device is not "1" or "2"
+            Exception: If the device cannot be spun
+        """
         device = self._validate_device(device)
         self._command(f"~{device}1")
         logger.info("Spin device %s for %.1fs", device, duration)
