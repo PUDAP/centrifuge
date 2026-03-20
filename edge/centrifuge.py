@@ -65,7 +65,11 @@ class Centrifuge:
         """
         device = self._validate_device(device)
         try:
-            self._command(f"H{device}", wait_for={"Ok", f"Homed{device}"})
+            self._command(
+                f"H{device}",
+                wait_for_success={"Ok", f"Homed{device}"},
+                wait_for_failure={f"Timeout{device}"},
+            )
             logger.info("Lid %s opened successfully", device)
         except Exception:
             logger.error("Failed to open lid %s", device)
@@ -83,7 +87,7 @@ class Centrifuge:
         """
         device = self._validate_device(device)
         try:
-            self._command(f"#{device}050", wait_for="Ok")
+            self._command(f"#{device}050", wait_for_success="Ok")
             logger.info("Lid %s closed successfully", device)
         except Exception:
             logger.error("Failed to close lid %s", device)
@@ -157,14 +161,16 @@ class Centrifuge:
         *,
         retry: bool = True,
         response: bool = False,
-        wait_for: str | set[str] | None = None,
+        wait_for_success: str | set[str] | None = None,
+        wait_for_failure: str | set[str] | None = None,
     ) -> str:
         """Send a command and return the result.
 
         Args:
             retry: Reconnect and retry on connection failures.
             response: Command returns a response without echoing first.
-            wait_for: Block until this exact response string is received.
+            wait_for_success: Block until one of these success responses is received.
+            wait_for_failure: If one of these is received instead, raise an error.
         """
         def action():
             self._send(command)
@@ -174,13 +180,20 @@ class Centrifuge:
 
         result = self._with_retry(action) if retry else action()
 
-        if wait_for is not None:
-            return self._wait_for(command, wait_for)
+        if wait_for_success is not None:
+            return self._wait_for(command, wait_for_success, wait_for_failure)
         return result
 
-    def _wait_for(self, command: str, target: str | set[str], timeout_s: float = 30.0) -> str:
-        """Read responses until *target* is received, tolerating recv timeouts."""
-        targets = target if isinstance(target, set) else {target}
+    def _wait_for(
+        self,
+        command: str,
+        success: str | set[str],
+        failure: str | set[str] | None = None,
+        timeout_s: float = 30.0,
+    ) -> str:
+        """Read responses until a success or failure message is received."""
+        success_targets = success if isinstance(success, set) else {success}
+        failure_targets = failure if isinstance(failure, set) else {failure} if failure else set()
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             try:
@@ -188,9 +201,13 @@ class Centrifuge:
             except websocket.WebSocketTimeoutException:
                 logger.info("Command %s still waiting...", command)
                 continue
-            if resp in targets:
+            if resp in success_targets:
                 return resp
+            if resp in failure_targets:
+                raise RuntimeError(
+                    f"Command {command} failed with: {resp}"
+                )
             logger.info("Command %s in progress: %s", command, resp)
         raise TimeoutError(
-            f"Command {command} did not receive any of {targets!r} within {timeout_s}s"
+            f"Command {command} did not receive any of {success_targets!r} within {timeout_s}s"
         )
