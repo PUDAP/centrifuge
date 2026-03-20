@@ -30,6 +30,7 @@ class Centrifuge:
     def startup(self) -> str:
         """Open websocket connection and return device greeting."""
         self._connect()
+        logger.info("Centrifuge machine connected successfully")
         return self._recv()
 
     def close(self) -> None:
@@ -37,67 +38,50 @@ class Centrifuge:
         if self._ws is not None:
             try:
                 self._ws.close()
+                logger.debug("Websocket disconnected")
             finally:
                 self._ws = None
 
     def get_mac_address(self) -> str:
-        """Return current device MAC address data."""
-        _, data = self._request("@", wait_for_response=True)
-        logger.info("MAC address: %s", data)
-        return data or "no data received"
+        """Return current device MAC address."""
+        mac = self._command("@", response=True)
+        logger.info("MAC address: %s", mac)
+        return mac
 
     def get_position(self) -> str:
-        """Return current lid position data."""
-        _, data = self._request("?", wait_for_response=True)
-        logger.info("Position: %s", data)
-        return data or "no data received"
+        """Return current lid position."""
+        position = self._command("?", response=True)
+        logger.info("Position: %s", position)
+        return position
 
-    def open_lid(self, device: str) -> str:
-        """
-        Open lid for centrifuge device
-        
-        params:
-          - device: str - the device to open the lid of ("1" or "2")
-        """
+    def open_lid(self, device: str) -> None:
+        """Open lid for centrifuge device 1 or 2."""
         device = self._validate_device(device)
-        _, status = self._request(f"H{device}", wait_for_completion=True)
-        
-        if status == "Ok":
+        try:
+            self._command(f"H{device}", wait_for={"Ok", f"Homed{device}"})
             logger.info("Lid %s opened successfully", device)
-        else:
-            logger.error("Failed to open lid %s, status: %s", device, status)
-            raise RuntimeError(f"Failed to open lid for device {device}: status={status!r}")
+        except Exception:
+            logger.error("Failed to open lid %s", device)
+            raise
 
-    def close_lid(self, device: str) -> str:
-        """
-        Close lid for centrifuge device 1 or 2.
-
-        Returns status response (expected "Ok" when movement is done).
-        """
+    def close_lid(self, device: str) -> None:
+        """Close lid for centrifuge device 1 or 2."""
         device = self._validate_device(device)
-        _, status = self._request(f"#{device}050", wait_for_completion=True)
-        
-        if status == "Ok":
+        try:
+            self._command(f"#{device}050", wait_for="Ok")
             logger.info("Lid %s closed successfully", device)
-        else:
-            logger.error("Failed to close lid %s, status: %s", device, status)
-            raise RuntimeError(f"Failed to close lid for device {device}: status={status!r}")
+        except Exception:
+            logger.error("Failed to close lid %s", device)
+            raise
 
-    def spin(self, device: str):
-        """Start spinning centrifuge device 1 or 2 and return echo."""
+    def spin(self, device: str, duration: float) -> None:
+        """Spin centrifuge device 1 or 2 for the given duration in seconds."""
         device = self._validate_device(device)
-        self._request(f"~{device}1")
-
-    def stop(self, device: str) -> str:
-        """
-        Stop spinning centrifuge
-        
-        params:
-          - device: str - the device to stop ("1" or "2")
-        """
-        device = self._validate_device(device)
-        self._request(f"~{device}0")
-      
+        self._command(f"~{device}1")
+        logger.info("Spin device %s for %.1fs", device, duration)
+        time.sleep(duration)
+        self._command(f"~{device}0")
+        logger.info("Device %s stopped", device)
 
     # Private methods
 
@@ -127,23 +111,10 @@ class Centrifuge:
         message = self._ws.recv()
         return str(message)
 
-    def _request(
-        self,
-        command: str,
-        wait_for_response: bool = False,
-        wait_for_completion: bool = False,
-    ) -> tuple[str, Optional[str]]:
+    def _with_retry(self, action):
         for attempt in range(1, self.max_retries + 1):
             try:
-                self._send(command)
-                echo = self._recv()
-                response = self._recv() if (wait_for_response or wait_for_completion) else None
-                if wait_for_completion:
-                    while response and response.startswith("Homing"):
-                        logger.info("Command %s in progress: %s; waiting...", command, response)
-                        time.sleep(self.retry_delay_s)
-                        response = self._recv()
-                return echo, response
+                return action()
             except (
                 websocket.WebSocketConnectionClosedException,
                 websocket.WebSocketTimeoutException,
@@ -154,5 +125,48 @@ class Centrifuge:
                     raise
                 self._connect()
                 time.sleep(self.retry_delay_s)
-
         raise RuntimeError("unreachable")
+
+    def _command(
+        self,
+        command: str,
+        *,
+        retry: bool = True,
+        response: bool = False,
+        wait_for: str | set[str] | None = None,
+    ) -> str:
+        """Send a command and return the result.
+
+        Args:
+            retry: Reconnect and retry on connection failures.
+            response: Command returns a response without echoing first.
+            wait_for: Block until this exact response string is received.
+        """
+        def action():
+            self._send(command)
+            if response:
+                return self._recv()
+            return self._recv()
+
+        result = self._with_retry(action) if retry else action()
+
+        if wait_for is not None:
+            return self._wait_for(command, wait_for)
+        return result
+
+    def _wait_for(self, command: str, target: str | set[str], timeout_s: float = 30.0) -> str:
+        """Read responses until *target* is received, tolerating recv timeouts."""
+        targets = target if isinstance(target, set) else {target}
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                resp = self._recv()
+            except websocket.WebSocketTimeoutException:
+                logger.info("Command %s still waiting...", command)
+                continue
+            if resp in targets:
+                return resp
+            logger.info("Command %s in progress: %s", command, resp)
+        raise TimeoutError(
+            f"Command {command} did not receive any of {targets!r} within {timeout_s}s"
+        )

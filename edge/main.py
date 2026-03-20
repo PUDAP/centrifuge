@@ -56,7 +56,7 @@ async def main():
     logger.info("Initializing machine driver")
     driver = Centrifuge(ws_url=str(config.ws_url))
     driver.startup()
-    logger.info("Biologic machine initialized successfully")
+    logger.info("Centrifuge machine initialized successfully")
 
     logger.info("Connecting to NATS at %s", config.nats_servers)
     edge_nats_client = EdgeNatsClient(
