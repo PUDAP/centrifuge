@@ -137,7 +137,7 @@ class Centrifuge:
         self._ensure_connected()
         assert self._ws is not None
         message = self._ws.recv()
-        return str(message)
+        return str(message).strip()
 
     def _with_retry(self, action):
         for attempt in range(1, self.max_retries + 1):
@@ -201,9 +201,9 @@ class Centrifuge:
             except websocket.WebSocketTimeoutException:
                 logger.info("Command %s still waiting...", command)
                 continue
-            if resp in success_targets:
+            if any(s in resp for s in success_targets):
                 return resp
-            if resp in failure_targets:
+            if any(f in resp for f in failure_targets):
                 raise RuntimeError(
                     f"Command {command} failed with: {resp}"
                 )
