@@ -138,6 +138,11 @@ class Centrifuge:
                 self._send(command)
                 echo = self._recv()
                 response = self._recv() if (wait_for_response or wait_for_completion) else None
+                if wait_for_completion:
+                    while response and response.startswith("Homing"):
+                        logger.info("Command %s in progress: %s; waiting...", command, response)
+                        time.sleep(self.retry_delay_s)
+                        response = self._recv()
                 return echo, response
             except (
                 websocket.WebSocketConnectionClosedException,
