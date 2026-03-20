@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from re import L
 import time
 import logging
 from typing import Optional
@@ -74,8 +73,8 @@ class Centrifuge:
         try:
             self._command(
                 f"H{device}",
-                wait_for_success={"Ok", f"Homed{device}"},
-                wait_for_failure={f"Timeout{device}"},
+                success_str={"Ok", f"Homed{device}"},
+                failure_str={f"Timeout{device}"},
             )
             logger.info("Lid %s opened successfully", device)
         except Exception:
@@ -94,7 +93,7 @@ class Centrifuge:
         """
         device = self._validate_device(device)
         try:
-            self._command(f"#{device}050", wait_for_success="Ok")
+            self._command(f"#{device}050", success_str="Ok")
             logger.info("Lid %s closed successfully", device)
         except Exception:
             logger.error("Failed to close lid %s", device)
@@ -147,6 +146,9 @@ class Centrifuge:
         return str(message).strip()
 
     def _with_retry(self, action):
+        """
+        Retry an action up to max_retries times with a delay of retry_delay_s between attempts.
+        """
         for attempt in range(1, self.max_retries + 1):
             try:
                 return action()
@@ -168,16 +170,16 @@ class Centrifuge:
         *,
         retry: bool = True,
         response: bool = False,
-        wait_for_success: str | set[str] | None = None,
-        wait_for_failure: str | set[str] | None = None,
+        success_str: str | set[str] | None = None,
+        failure_str: str | set[str] | None = None,
     ) -> str:
         """Send a command and return the result.
 
         Args:
             retry: Reconnect and retry on connection failures.
             response: Command returns a response without echoing first.
-            wait_for_success: Block until one of these success responses is received.
-            wait_for_failure: If one of these is received instead, raise an error.
+            success_str: Block until one of these success responses is received.
+            failure_str: If one of these is received instead, raise an error.
         """
         def action():
             self._send(command)
@@ -187,20 +189,22 @@ class Centrifuge:
 
         result = self._with_retry(action) if retry else action()
 
-        if wait_for_success is not None:
-            return self._wait_for(command, wait_for_success, wait_for_failure)
+        if success_str is not None:
+            return self._wait_for(command, success_str, failure_str)
         return result
 
     def _wait_for(
         self,
         command: str,
-        success: str | set[str],
-        failure: str | set[str] | None = None,
+        success_str: str | set[str],
+        failure_str: str | set[str] | None = None,
         timeout_s: float = 30.0,
     ) -> str:
         """Read responses until a success or failure message is received."""
-        success_targets = success if isinstance(success, set) else {success}
-        failure_targets = failure if isinstance(failure, set) else {failure} if failure else set()
+        success_targets = success_str if isinstance(success_str, set) else {success_str}
+        failure_targets = (
+            failure_str if isinstance(failure_str, set) else {failure_str} if failure_str else set()
+        )
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             try:
