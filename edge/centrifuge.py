@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from re import L
 import time
 import logging
 from typing import Optional
@@ -52,6 +53,12 @@ class Centrifuge:
         position = self._command("?", response=True)
         logger.info("Position: %s", position)
         return position
+    
+    def home(self) -> None:
+        """Homes the centrifuge machine."""
+        self.open_lid("1")
+        self.open_lid("2")
+        logger.info("Centrifuge machine homed successfully")
 
     def open_lid(self, device: str) -> None:
         """Open lid for centrifuge device
@@ -199,7 +206,7 @@ class Centrifuge:
             try:
                 resp = self._recv()
             except websocket.WebSocketTimeoutException:
-                logger.info("Command %s still waiting...", command)
+                logger.debug("Command %s still waiting...", command)
                 continue
             if any(s in resp for s in success_targets):
                 return resp
@@ -207,7 +214,7 @@ class Centrifuge:
                 raise RuntimeError(
                     f"Command {command} failed with: {resp}"
                 )
-            logger.info("Command %s in progress: %s", command, resp)
+            logger.debug("Command %s in progress: %s", command, resp)
         raise TimeoutError(
             f"Command {command} did not receive any of {success_targets!r} within {timeout_s}s"
         )
