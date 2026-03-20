@@ -5,6 +5,9 @@ from __future__ import annotations
 import time
 from typing import Optional
 import websocket
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Centrifuge:
@@ -40,11 +43,13 @@ class Centrifuge:
     def get_mac_address(self) -> str:
         """Return current device MAC address data."""
         _, data = self._request("@", wait_for_response=True)
+        logger.info("MAC address: %s", data)
         return data or "no data received"
 
     def get_position(self) -> str:
         """Return current lid position data."""
         _, data = self._request("?", wait_for_response=True)
+        logger.info("Position: %s", data)
         return data or "no data received"
 
     def open_lid(self, device: str) -> str:
@@ -55,26 +60,28 @@ class Centrifuge:
           - device: str - the device to open the lid of ("1" or "2")
         """
         device = self._validate_device(device)
-        _, completion = self._request(f"H{device}", wait_for_completion=True)
+        _, status = self._request(f"H{device}", wait_for_completion=True)
         
-        if completion == "Ok":
-            return "Lid opened successfully"
+        if status == "Ok":
+            logger.info("Lid %s opened successfully", device)
         else:
-            return "Failed to open lid"
+            logger.error("Failed to open lid %s, status: %s", device, status)
+            raise RuntimeError(f"Failed to open lid for device {device}: status={status!r}")
 
     def close_lid(self, device: str) -> str:
         """
         Close lid for centrifuge device 1 or 2.
 
-        Returns completion response (expected "Ok" when movement is done).
+        Returns status response (expected "Ok" when movement is done).
         """
         device = self._validate_device(device)
-        _, completion = self._request(f"#{device}050", wait_for_completion=True)
+        _, status = self._request(f"#{device}050", wait_for_completion=True)
         
-        if completion == "Ok":
-            return "Lid closed successfully"
+        if status == "Ok":
+            logger.info("Lid %s closed successfully", device)
         else:
-            return "Failed to close lid"
+            logger.error("Failed to close lid %s, status: %s", device, status)
+            raise RuntimeError(f"Failed to close lid for device {device}: status={status!r}")
 
     def spin(self, device: str):
         """Start spinning centrifuge device 1 or 2 and return echo."""
