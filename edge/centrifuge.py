@@ -21,10 +21,10 @@ class Centrifuge:
         max_retries: int = 3,
         retry_delay_s: float = 1.0,
     ) -> None:
-        self.ws_url = ws_url
-        self.connect_timeout_s = connect_timeout_s
-        self.max_retries = max_retries
-        self.retry_delay_s = retry_delay_s
+        self._ws_url = ws_url
+        self._connect_timeout_s = connect_timeout_s
+        self._max_retries = max_retries
+        self._retry_delay_s = retry_delay_s
         self._ws: Optional[websocket.WebSocket] = None
 
     def startup(self) -> str:
@@ -127,7 +127,7 @@ class Centrifuge:
     def _connect(self) -> None:
         self.close()
         ws = websocket.WebSocket()
-        ws.connect(self.ws_url, timeout=self.connect_timeout_s)
+        ws.connect(self._ws_url, timeout=self._connect_timeout_s)
         self._ws = ws
 
     def _ensure_connected(self) -> None:
@@ -149,7 +149,7 @@ class Centrifuge:
         """
         Retry an action up to max_retries times with a delay of retry_delay_s between attempts.
         """
-        for attempt in range(1, self.max_retries + 1):
+        for attempt in range(1, self._max_retries + 1):
             try:
                 return action()
             except (
@@ -158,10 +158,10 @@ class Centrifuge:
                 websocket.WebSocketException,
                 OSError,
             ):
-                if attempt >= self.max_retries:
+                if attempt >= self._max_retries:
                     raise
                 self._connect()
-                time.sleep(self.retry_delay_s)
+                time.sleep(self._retry_delay_s)
         raise RuntimeError("unreachable")
 
     def _command(
