@@ -1,8 +1,8 @@
 services:
   centrifuge:
     build:
-      context: ..
-      dockerfile: edge/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/pudap/centrifuge-edge:latest
     container_name: centrifuge-edge
     restart: unless-stopped

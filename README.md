@@ -1,6 +1,6 @@
 # centrifuge
 
-Monorepo for the centrifuge edge service.
+Edge service for the Centrifuge machine.
 
 ## What It Does
 
@@ -16,47 +16,41 @@ Monorepo for the centrifuge edge service.
 
 ## Environment Setup
 
-From repo root:
-
 ```bash
-cp edge/.env.example edge/.env
+cp .env.example .env
 ```
 
-Edit `edge/.env` and configure:
+Edit `.env` and configure:
 
 - `MACHINE_ID`
 - `NATS_SERVERS`
-- `CENTRIFUGE_IP`
+- `WS_URL`
 
 ## Run With Docker (Recommended)
-
-All commands below are run from repo root.
 
 Build and start:
 
 ```bash
-docker compose -f edge/compose.yml up -d --build
+docker compose up -d --build
 ```
 
 View logs:
 
 ```bash
-docker compose -f edge/compose.yml logs -f
+docker compose logs -f
 ```
 
 Stop:
 
 ```bash
-docker compose -f edge/compose.yml down
+docker compose down
 ```
 
 ## Run Baremetal (uv)
 
-From repo root:
-
 ```bash
-uv sync --all-packages
-uv run --package centrifuge-edge python edge/main.py
+uv sync
+uv run python main.py
 ```
 
 ## Build and Push Image (GHCR)
@@ -70,7 +64,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 Build:
 
 ```bash
-docker compose -f edge/compose.yml build
+docker compose build
 ```
 
 Push:
@@ -82,10 +76,5 @@ docker push ghcr.io/PUDAP/centrifuge-edge:latest
 Or with Compose:
 
 ```bash
-docker compose -f edge/compose.yml push
+docker compose push
 ```
-
-## Notes
-
-- Docker build context is workspace root (`..` in `edge/compose.yml`).
-- Dockerfile path is `edge/Dockerfile`.

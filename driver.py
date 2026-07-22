@@ -10,7 +10,7 @@ import websocket
 logger = logging.getLogger(__name__)
 
 
-class Centrifuge:
+class Driver:
     """Driver for communicating with the centrifuge over websocket."""
 
     def __init__(

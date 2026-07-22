@@ -13,10 +13,8 @@ RUN apt-get update && apt-get install -y \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock ./
-COPY edge/ ./edge/
+COPY . .
 
-RUN uv sync --frozen --no-dev --no-install-project --package centrifuge-edge
-
-WORKDIR /app/edge
+RUN uv sync --frozen --no-dev --no-install-project
 
 CMD ["uv", "run", "python", "main.py"]

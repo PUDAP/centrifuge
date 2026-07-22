@@ -2,11 +2,6 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
-[manifest]
-members = [
-    "centrifuge-edge",
-]
-
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -19,7 +14,7 @@ wheels = [
 [[package]]
 name = "centrifuge-edge"
 version = "0.1.0"
-source = { virtual = "edge" }
+source = { virtual = "." }
 dependencies = [
     { name = "puda-comms" },
     { name = "pydantic" },

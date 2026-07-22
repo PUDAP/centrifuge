@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import logging
 
-from centrifuge import Centrifuge
+from driver import Driver
 
 # Configure logging
 logging.basicConfig(
@@ -11,14 +11,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     force=True,
 )
-logging.getLogger("centrifuge").setLevel(logging.DEBUG)
+logging.getLogger("driver").setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 WS_URL = "ws://192.168.2.102:81"
 
 
 def run_sequence(device: str) -> None:
-    centri = Centrifuge(ws_url=WS_URL)
+    centri = Driver(ws_url=WS_URL)
 
     try:
         centri.startup()

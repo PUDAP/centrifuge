@@ -10,7 +10,7 @@ import sys
 import time
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from puda_comms import EdgeNatsClient, EdgeRunner
-from centrifuge import Centrifuge
+from driver import Driver
 
 
 # Configure logging
@@ -54,7 +54,7 @@ async def main():
     logger.info("Full config: %s", config.model_dump())
 
     logger.info("Initializing machine driver")
-    driver = Centrifuge(ws_url=str(config.ws_url))
+    driver = Driver(ws_url=str(config.ws_url))
     driver.startup()
     logger.info("Centrifuge machine initialized successfully")
 
