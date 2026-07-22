@@ -7,9 +7,6 @@ requires-python = ">=3.14"
 dependencies = [
     "psutil>=7.0.0",
     "puda>=0.0.16",
-    "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
-    "python-dotenv>=1.2.1",
-    "setuptools<81",
     "websocket-client>=1.8.0",
 ]
