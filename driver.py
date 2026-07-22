@@ -47,11 +47,15 @@ class Driver:
         logger.info("MAC address: %s", mac)
         return mac
 
-    def get_position(self) -> str:
-        """Return current lid position."""
+    def get_position(self) -> dict[str, float]:
+        """Return current lid position for position publishing."""
         position = self._command("?", response=True)
         logger.info("Position: %s", position)
-        return position
+        try:
+            value = float(position)
+        except (TypeError, ValueError):
+            value = 0.0
+        return {"position": value}
     
     def home(self) -> None:
         """Homes the centrifuge machine."""
