@@ -5,8 +5,7 @@ description = "Edge service for the Centrifuge machine"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "psutil>=7.0.0",
-    "puda>=0.0.16",
+    "puda>=0.0.18",
     "pydantic-settings>=2.12.0",
     "websocket-client>=1.8.0",
 ]

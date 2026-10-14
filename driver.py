@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import time
 import logging
+import threading
 from typing import Optional
 import websocket
+
+from puda import command, safety, tlm_stream
 
 logger = logging.getLogger(__name__)
 
 
 class Driver:
-    """Driver for communicating with the centrifuge over websocket."""
+    """Dual-bay centrifuge that opens and closes lids and spins samples, controlled over websocket."""
 
     def __init__(
         self,
@@ -26,11 +29,17 @@ class Driver:
         self._max_retries = max_retries
         self._retry_delay_s = retry_delay_s
         self._ws: Optional[websocket.WebSocket] = None
+        # The websocket is not thread-safe; telemetry polling runs concurrently with commands.
+        self._lock = threading.RLock()
 
-    def startup(self) -> str:
+    def startup(self) -> None:
         """Connect to the centrifuge machine via websocket."""
         self._connect()
         logger.info("Centrifuge machine connected successfully")
+
+    def shutdown(self) -> None:
+        """Release the websocket before the edge stops or restarts."""
+        self.close()
 
     def close(self) -> None:
         """Close websocket connection if it exists."""
@@ -41,28 +50,43 @@ class Driver:
             finally:
                 self._ws = None
 
+    @command
     def get_mac_address(self) -> str:
         """Return current device MAC address."""
         mac = self._command("@", response=True)
         logger.info("MAC address: %s", mac)
         return mac
 
-    def get_position(self) -> dict[str, float]:
-        """Return current lid position for position publishing."""
-        position = self._command("?", response=True)
-        logger.info("Position: %s", position)
+    @tlm_stream(interval=3.0, name="position")
+    def get_position(self) -> dict[str, float] | None:
+        """Current lid position of the centrifuge."""
+        # Skip this sample instead of queueing behind a long-running command.
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            position = self._command("?", response=True)
+        finally:
+            self._lock.release()
+        logger.debug("Position: %s", position)
         try:
             value = float(position)
         except (TypeError, ValueError):
             value = 0.0
         return {"position": value}
     
+    @command
     def home(self) -> None:
         """Homes the centrifuge machine."""
         self.open_lid("1")
         self.open_lid("2")
         logger.info("Centrifuge machine homed successfully")
 
+    @command
+    @safety(
+        summary="Opens the lid of one centrifuge bay.",
+        hazards=["rotor may still be moving"],
+        forbidden_when="The bay is spinning.",
+    )
     def open_lid(self, device: str) -> None:
         """Open lid for centrifuge device
         
@@ -85,6 +109,12 @@ class Driver:
             logger.error("Failed to open lid %s", device)
             raise
 
+    @command
+    @safety(
+        summary="Closes the lid of one centrifuge bay.",
+        hazards=["pinch point"],
+        requires="Hands and objects are clear of the lid.",
+    )
     def close_lid(self, device: str) -> None:
         """Close lid for centrifuge device
 
@@ -103,6 +133,13 @@ class Driver:
             logger.error("Failed to close lid %s", device)
             raise
 
+    @command
+    @safety(
+        summary="Spins one centrifuge bay for the given duration, then stops it.",
+        hazards=["high-speed rotating rotor", "unbalanced load"],
+        requires="Lid is closed and the load is balanced.",
+        forbidden_when="The lid is open.",
+    )
     def spin(self, device: str, duration: float) -> None:
         """Spin centrifuge device for the given duration in seconds.
         
@@ -115,11 +152,15 @@ class Driver:
             Exception: If the device cannot be spun
         """
         device = self._validate_device(device)
+        if duration < 0:
+            raise ValueError("duration must be greater than or equal to 0 seconds")
         self._command(f"~{device}1")
-        logger.info("Spin device %s for %.1fs", device, duration)
-        time.sleep(duration)
-        self._command(f"~{device}0")
-        logger.info("Device %s stopped", device)
+        try:
+            logger.info("Spin device %s for %.1fs", device, duration)
+            time.sleep(duration)
+        finally:
+            self._command(f"~{device}0")
+            logger.info("Device %s stopped", device)
 
     # Private methods
 
@@ -191,11 +232,12 @@ class Driver:
                 return self._recv()
             return self._recv()
 
-        result = self._with_retry(action) if retry else action()
+        with self._lock:
+            result = self._with_retry(action) if retry else action()
 
-        if success_str is not None:
-            return self._wait_for(command, success_str, failure_str)
-        return result
+            if success_str is not None:
+                return self._wait_for(command, success_str, failure_str)
+            return result
 
     def _wait_for(
         self,
